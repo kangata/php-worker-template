@@ -1,0 +1,20 @@
+version: "3"
+
+services:
+  worker:
+    image: quetzalarc/php:7.3-cli-alpine
+    container_name: php-worker
+    restart: unless-stopped
+    volumes:
+      - .:/usr/src/app
+    environment:
+      - APP_NAME=PHP Worker
+    logging:
+      options:
+        max-size: "1m"
+        max-file: "1"
+
+networks:
+  default:
+    external:
+      name: dev
