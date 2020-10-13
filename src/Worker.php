@@ -3,48 +3,68 @@
 namespace App;
 
 use Exception;
-use PhpAmqpLib\Connection\AMQPStreamConnection;
+use PhpAmqpLib\Connection\AMQPLazyConnection;
 use PhpAmqpLib\Exchange\AMQPExchangeType;
-use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Wire\AMQPTable;
 
 class Worker
 {
-    private $connection;
+    private $connection = null;
 
-    private $channel;
+    private $connectionName = null;
 
-    private $validator;
+    private $channel = null;
 
-    public function __construct()
+    private $env = null;
+
+    private $name = null;
+
+    private $validator = null;
+
+    private function __construct()
     {
+        $this->name = env('APP_NAME');
+        $this->env = strtoupper(env('APP_ENV'));
+        $this->connectionName = "{$this->env} # {$this->name}";
+
         $this->connect();
 
         $this->validator = new Validator;
     }
 
+    private function config()
+    {
+        $config = [
+            'host' => env('RABBITMQ_HOST'),
+            'port' => env('RABBITMQ_PORT'),
+            'user' => env('RABBITMQ_USERNAME'),
+            'password' => env('RABBITMQ_PASSWORD'),
+            'vhost' => env('RABBITMQ_VHOST')
+        ];
+
+        return $config;
+    }
+
     private function connect()
     {
         try {
-            $this->connection = new AMQPStreamConnection(
-                env('RABBITMQ_HOST'),
-                env('RABBITMQ_PORT'),
-                env('RABBITMQ_USERNAME'),
-                env('RABBITMQ_PASSWORD'),
-                env('RABBITMQ_VHOST')
-            );
+            $hosts = [$this->config()];
 
-            logInfo('Worker connected to server');
+            AMQPLazyConnection::$LIBRARY_PROPERTIES['connection_name'] = ['S', $this->connectionName];
+
+            $this->connection = AMQPLazyConnection::create_connection($hosts);
+
+            logInfo("Start {$this->name} [{$this->env}]", $data = [], $publish = true);
         } catch (Exception $e) {
-            logError($e->getMessage());
+            throw $e;
         }
 
         try {
             $this->channel = $this->connection->channel();
 
-            logInfo('Worker connected to channel');
+            logInfo('Connected to channel', $data = [], $publish = true);
         } catch (Exception $e) {
-            logError($e->getMessage());
+            throw $e;
         }
     }
 
@@ -60,9 +80,9 @@ class Worker
 
     public static function start()
     {
-        $self = new static;
-
         try {
+            $self = new static;
+
             $self->channel()->exchange_declare(
                 env('RABBITMQ_EXCHANGE'),
                 AMQPExchangeType::DIRECT,
@@ -79,9 +99,9 @@ class Worker
 
             $self->channel()->basic_consume(
                 env('RABBITMQ_QUEUE'),
-                $customerTag = '',
+                $consumerTag = '',
                 $noLocal = false,
-                $noAck = true,
+                $noAck = env('RABBITMQ_NOACK', false),
                 $exclusive = false,
                 $nowait = false,
                 $callback = function ($message) use ($self) {
@@ -92,16 +112,16 @@ class Worker
                     }
                 }
             );
+
+            while ($self->channel()->is_consuming()) {
+                $self->channel()->wait();
+            }
+    
+            $this->channel()->close();
+            $this->connection()->close();
         } catch (Exception $e) {
-            logError($e->getMessage());
+            logError($e->getMessage(), $data = [], $publish = true);
         }
-
-        while ($self->channel()->is_consuming()) {
-            $self->channel()->wait();
-        }
-
-        $this->channel()->close();
-        $this->connection()->close();
     }
 
     private function handleMessage($message)
@@ -112,26 +132,37 @@ class Worker
         $data = $properties->getNativeData();
         $headers = isset($data['application_headers'])
             ? $data['application_headers']
-            : null;
-
+            : [];
         $headersJson = json_encode($headers);
 
-        logInfo('Received payload');
-        showLog('PAYLOAD: '.$payloadJson);
+        logInfo(
+            'Received message',
+            $data = $payload ?? ['raw' => $payloadJson],
+            $publish = true
+        );
 
-        $this->validatePayload($payload);
+        try {
+            $this->validatePayload($payload);
+        } catch (Exception $e) {
+            throw $e;
+        }
 
-        logInfo('Received headers');
-        showLog('HEADERS: '.$headersJson);
+        if (!empty($headers)) {
+            logInfo('Received headers', $data = $headers, $publish = true);
+        }
 
-        $this->validateHeaders($headers);
+        try {
+            $this->validateHeaders($headers);
+        } catch (Exception $e) {
+            throw $e;
+        }
 
         (new \App\Handlers\MessageHandler)($message);
     }
 
     private function handleMessageError($message, $error)
     {
-        showLog('ERROR: '.$error->getMessage());
+        logError($error->getMessage(), $data = [], $publish = true);
 
         (new \App\Handlers\MessageErrorHandler)($message);
     }

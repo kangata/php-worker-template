@@ -1,25 +1,45 @@
 <?php
 
+use App\Logger;
+
 function logger($message)
 {
     $format = "[%s] %s\n";
 
-    return sprintf($format, date('Y-m-d H:i:s'), $message);
+    $log = sprintf($format, date('Y-m-d H:i:s'), $message);
+
+    return $log;
 }
 
-function showLog($message)
+function showLog($message, array $data = [], $publish = false)
 {
-  echo logger($message);
+    echo logger($message);
+
+    if (!empty($data)) {
+        echo logger('DATA: ' . json_encode($data));
+    }
+
+    if ($publish) {
+        $level = preg_match('/^ERROR:/', $message) ? 'error' : 'info';
+
+        $publishMessage = preg_replace('/(^ERROR:\s)|(^INFO:\s)/', '', $message);
+
+        try {
+            (new Logger)->publish($level, $publishMessage, $data);
+        } catch (\Exception $e) {
+            logError($e->getMessage());
+        }
+    }
 }
 
-function logInfo($message)
+function logInfo($message, array $data = [], $publish = false)
 {
-  showLog('INFO: ' . $message);
+    showLog('INFO: ' . $message, $data, $publish);
 }
 
-function logError($message)
+function logError($message, array $data = [], $publish = false)
 {
-  showLog('ERROR: ' . $message);
+    showLog('ERROR: ' . $message, $data, $publish);
 }
 
 function errorHandler($errno, $errstr, $errfile, $errline)
@@ -28,8 +48,7 @@ function errorHandler($errno, $errstr, $errfile, $errline)
 
     $message = sprintf($format, $errstr, $errfile, $errline);
 
-    logError($message);
+    logError($message, $data = [], $publish = true);
 
     die;
 }
-
