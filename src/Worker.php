@@ -157,7 +157,11 @@ class Worker
             throw $e;
         }
 
-        (new \App\Handlers\MessageHandler)($message);
+        try {
+            (new \App\Handlers\MessageHandler)($message);
+        } catch (Exception $e) {
+            throw $e;
+        }
     }
 
     private function handleMessageError($message, $error)
