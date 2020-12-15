@@ -6,6 +6,11 @@ class MessageHandler
 {
     private $message = null;
 
+    public function __construct()
+    {
+        //
+    }
+
     /**
      * Remove from queue
      *
@@ -25,13 +30,15 @@ class MessageHandler
     {
         $payload = json_decode($this->message->body, true);
 
+        $delay = env('REQUEUE_DELAY', 30);
+
         logInfo(
-            'Requeue message',
+            'Requeue message with delay '. $delay .' seconds',
             $payload ?? ['raw' => $this->message->body],
             $publish = true
         );
 
-        sleep(env('REQUEUE_DELAY', 60));
+        sleep($delay);
 
         $this->message->delivery_info['channel']->basic_nack(
             $tag = $this->message->delivery_info['delivery_tag'],

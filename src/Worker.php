@@ -11,7 +11,11 @@ class Worker
 {
     private $connection = null;
 
-    private $connectionName = null;
+	private $connectionName = null;
+
+	private $connectionOptions = [
+		'heartbeat' => 0,
+	];
 
     private $channel = null;
 
@@ -25,14 +29,14 @@ class Worker
     {
         $this->name = env('APP_NAME');
         $this->env = strtoupper(env('APP_ENV'));
-        $this->connectionName = "{$this->env} # {$this->name}";
+        $this->connectionName = "{$this->name} # {$this->env}";
 
         $this->connect();
 
         $this->validator = new Validator;
     }
 
-    private function config()
+    private function config($key = null)
     {
         $config = [
             'host' => env('RABBITMQ_HOST'),
@@ -42,7 +46,23 @@ class Worker
             'vhost' => env('RABBITMQ_VHOST')
         ];
 
+        if ($key != null && isset($config[$key])) {
+            return $config[$key];
+        }
+
         return $config;
+    }
+
+    private function url()
+    {
+        $host = $this->config('host');
+        $port = $this->config('port');
+        $vhost = $this->config('vhost');
+
+        $url = "{$host}:{$port}/$vhost";
+        $url = preg_replace("/\/\//", "/", $url);
+
+        return $url;
     }
 
     private function connect()
@@ -52,9 +72,9 @@ class Worker
 
             AMQPLazyConnection::$LIBRARY_PROPERTIES['connection_name'] = ['S', $this->connectionName];
 
-            $this->connection = AMQPLazyConnection::create_connection($hosts);
+            $this->connection = AMQPLazyConnection::create_connection($hosts, $this->connectionOptions);
 
-            logInfo("Start {$this->name} [{$this->env}]", $data = [], $publish = true);
+            logInfo("`{$this->name}` connected to {$this->url()}", $data = [], $publish = true);
         } catch (Exception $e) {
             throw $e;
         }
@@ -80,6 +100,11 @@ class Worker
 
     public static function start()
     {
+        $name = env('APP_NAME');
+        $env = strtoupper(env('APP_ENV'));
+
+        logInfo("Start `{$name}` # {$env}", $data = [], $publish = true);
+
         try {
             $self = new static;
 
@@ -95,6 +120,16 @@ class Worker
                 env('RABBITMQ_QUEUE'),
                 env('RABBITMQ_EXCHANGE'),
                 env('RABBITMQ_ROUTING_KEY')
+            );
+
+            logInfo(
+                "Queue binded for `{$name}` # {$env}",
+                $data = [
+                    'exchange' => env('RABBITMQ_EXCHANGE'),
+                    'queue' => env('RABBITMQ_QUEUE'),
+                    'routing_key' => env('RABBITMQ_ROUTING_KEY'),
+                ],
+                $publish = true
             );
 
             $self->channel()->basic_consume(
@@ -116,7 +151,7 @@ class Worker
             while ($self->channel()->is_consuming()) {
                 $self->channel()->wait();
             }
-    
+
             $this->channel()->close();
             $this->connection()->close();
         } catch (Exception $e) {

@@ -1,6 +1,6 @@
 <?php
 
-use App\Logger;
+use App\Log;
 
 function logger($message)
 {
@@ -25,7 +25,7 @@ function showLog($message, array $data = [], $publish = false)
         $publishMessage = preg_replace('/(^ERROR:\s)|(^INFO:\s)/', '', $message);
 
         try {
-            (new Logger)->publish($level, $publishMessage, $data);
+            (new Log)->publish($level, $publishMessage, $data);
         } catch (\Exception $e) {
             logError($e->getMessage());
         }
@@ -51,4 +51,9 @@ function errorHandler($errno, $errstr, $errfile, $errline)
     logError($message, $data = [], $publish = true);
 
     die;
+}
+
+function fatalHandler()
+{
+    logError('Fatal error');
 }

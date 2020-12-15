@@ -7,8 +7,6 @@ services:
     restart: unless-stopped
     volumes:
       - .:/usr/src/app
-    environment:
-      - APP_NAME="PHP Worker"
     logging:
       options:
         max-size: "1m"

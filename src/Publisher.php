@@ -10,15 +10,15 @@ use PhpAmqpLib\Wire\AMQPTable;
 
 class Publisher
 {
-    private $channel;
+    private $channel = null;
 
-    private $config;
+    private $config = null;
 
-    private $connection;
+    private $connection = null;
 
     private $showLog = true;
 
-    private $options;
+    private $options = null;
 
     public function __construct($host, $port, $username, $password, $vhost)
     {
@@ -55,8 +55,6 @@ class Publisher
             }
         } catch (Exception $e) {
             logError($e->getMessage());
-
-            die;
         }
 
         try {
@@ -67,8 +65,6 @@ class Publisher
             }
         } catch (Exception $e) {
             logError($e->getMessage());
-
-            die;
         }
     }
 
