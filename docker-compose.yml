@@ -2,7 +2,7 @@ version: "3"
 
 services:
   worker:
-    image: quetzalarc/php:7.3-cli-alpine
+    image: quetzalarc/php:7.3-worker
     container_name: php-worker
     restart: unless-stopped
     volumes:
@@ -15,4 +15,4 @@ services:
 networks:
   default:
     external:
-      name: dev
+      name: worker
